@@ -1,0 +1,154 @@
+﻿@page "/KnowledgeBase/{KnowledgeBaseId}"
+@using System.Net.Http
+@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Json
+@using ChainingFrontend.Models
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Knowledge base</PageTitle>
+        <div class="col-md-8 mx-auto">
+                        @if (_knowledgeBase != null)
+                        {
+                <div class="card" style="margin: auto; max-width: 500px; min-height: 16rem;">
+                    <div class="card-header d-flex">
+<h1>@_knowledgeBase.Name</h1>
+</div>
+                    <div class="card-body">
+<p>Facts:</p>
+@if (_knowledgeBase.Facts == null)
+    {
+        <p>No facts.</p>
+    }
+    else
+    {
+            <ul>
+    @foreach (var fact in _knowledgeBase.Facts)
+    {
+        <li>@fact</li>
+    }
+</ul>
+
+    }
+<br>
+<p>Rules:</p>
+@if (_knowledgeBase.Rules == null)
+    {
+        <p>No rules.</p>
+    }
+    else
+    {
+<ol>
+    @foreach (var rule in _knowledgeBase.Rules)
+        {
+            <li>@rule.ToString()</li>
+        }
+</ol>
+    }
+    <NavLink class="btn btn-primary" href="@_editLink">
+    Edit
+</NavLink>
+<hr/>
+@if (_knowledgeBase.Facts is not null && _knowledgeBase.Facts.Count>0 && _knowledgeBase.Rules is not null && _knowledgeBase.Rules.Count>0)
+{
+<h2>Inference Tool</h2>
+            <EditForm Model="@_executionForm" OnValidSubmit="@HandleSubmit">
+                        <DataAnnotationsValidator/>
+                        <label class="form-label" for="goalField">Goal:</label>
+                                                <InputText id="goalField" class="form-control" style="margin-bottom: 1rem;" @bind-Value="@_executionForm.Goal"/>
+                        <ValidationMessage For="@(() => _executionForm.Goal)"/>
+<br>
+                                <label for="methods">Select inference method:</label>
+<select id="methods" @bind="@_executionForm.InferenceMethod">
+    <option value="ForwardChaining">Forward Chaining</option>
+    <option value="BackwardChaining">Backward Chaining</option>
+        </select>
+<br>
+<label for="trace">Include trace</label>
+<InputCheckbox id="trace" @bind-Value = "@_executionForm.IncludeTrace"/>
+                        <button  class="btn btn-primary align-bottom" type="submit">Execute</button>
+                                </EditForm>
+<hr/>
+@if (_result != null)
+                {
+                    <h3>Execution results</h3>
+                        <p>@_resultParagraph</p>
+<br />
+                                                <textarea id="trace" style="margin-bottom: 1rem;" @bind="@_result.Trace" readonly="readonly"/>
+                }
+                }
+            </div>
+                    <div class="card-footer">
+
+    <NavLink class="btn btn-primary" href="@_backLink">
+    Go back
+</NavLink>
+</div>
+</div>
+                        }
+                        else                         if (!string.IsNullOrWhiteSpace(_error))
+                        {
+                                                        <div class="alert alert-danger">
+                                @_error
+    </div>
+}
+else
+{
+    <p>Loading...</p>
+}
+</div>
+
+@code {
+    [Parameter]
+    public string KnowledgeBaseId{ get; set; }
+        Models.KnowledgeBase _knowledgeBase;
+    string? _error = null;
+    const string _apiURI = "https://localhost:7071/api/KnowledgeBase";
+    const string _executionURI = "https://localhost:7071/api/Chaining";
+    string? _editLink, _backLink;
+    readonly ExecutionForm _executionForm = new();
+    ExecutionResult _result;
+    string? _resultParagraph;
+    protected override async Task OnInitializedAsync()
+    {
+        _editLink = $"/KnowledgeBaseEdit/{KnowledgeBaseId}";
+        _backLink = "/KnowledgeBaseInit";
+        try
+        {
+                _knowledgeBase = await Http.GetFromJsonAsync<Models.KnowledgeBase>($"{_apiURI}/{KnowledgeBaseId}");
+            _knowledgeBase.Rules.Sort((a, b) => a.Number.CompareTo(b.Number));
+        }
+        catch (Exception)
+        {
+            _error = "Knowledge base does not exist.";
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _result = await Http.GetFromJsonAsync<ExecutionResult>($"{_executionURI}/{KnowledgeBaseId}?goal={_executionForm.Goal}&inferenceMethod={_executionForm.InferenceMethod}&trace={_executionForm.IncludeTrace}");
+        if (_result.GoalAchieved)
+        {
+            _resultParagraph = "Goal is achieved. Generated rule path is ";
+            if (_result.Path.Count > 0)
+            {
+                _resultParagraph = _resultParagraph + string.Join(", ", _result.Path)+".";
+            }
+            else
+            {
+                _resultParagraph = _resultParagraph + "empty.";
+            }
+        }
+        else
+        {
+            _resultParagraph = "Goal is not achieved.";
+        }
+    }
+    class ExecutionForm
+    {
+        [Required(ErrorMessage = "Goal must be provided.")]
+        public string? Goal { get; set; }
+        public string InferenceMethod { get; set; } = "ForwardChaining";
+        public bool IncludeTrace { get; set; }
+    }
+}

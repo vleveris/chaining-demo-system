@@ -1,0 +1,430 @@
+﻿@page "/KnowledgeBaseEdit/{KnowledgeBaseId}"
+@using System.Net.Http
+@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Json
+@using ChainingFrontend.Models
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit knowledge base</PageTitle>
+        <div class="col-md-8 mx-auto">
+                        @if (_knowledgeBase != null)
+                        {
+                <div class="card" style="margin: auto; max-width: 500px; min-height: 16rem;">
+                    <div class="card-header d-flex">
+<h1>@_knowledgeBase.Name</h1>
+</div>
+@if (_error != null)
+    {
+                                                        <div class="alert alert-danger">
+                                @_error
+    </div>
+    }
+                    <div class="card-body">
+    <label for="facts">Choose fact:</label>
+<select id="facts" value=@_selectedFact @onchange="SelectedFactChanged">
+    <option value=""></option>
+@if (_knowledgeBase.Facts != null)
+        {
+                    @foreach (var fact in _knowledgeBase.Facts)
+        {
+            <option value="@fact">@fact</option>
+        }
+        }
+        </select>
+                        <input type="text" id="factField" class="form-control" style="margin-bottom: 1rem;" @bind = "@_newFact"/>
+                                                <button class="btn btn-primary" type="button" onclick ="@ChangeFact">@_factButtonText</button>
+@if (_isFactUpdate)
+    {
+    <button class="btn btn-primary" type="button" onclick ="@RemoveFact">Remove fact</button>
+    }
+<br><br>
+<label for="rules">Choose rule:</label>
+<select id="rules" value="@_ruleNumber" @onchange="SelectedRuleChanged">
+    <option value=""></option>
+        @if (_knowledgeBase.Rules != null)
+        {
+@foreach (var rule in _knowledgeBase.Rules)
+        {
+            <option value="@rule.Number">@rule</option>
+        }
+        }
+        </select>
+<label for="ruleNumber">Rule number:</label>
+                        <input type="number" id="ruleNumber" class="form-control" style="margin-bottom: 1rem;" @bind = "@_selectedRule.Number" readonly="readonly"/>
+
+<label for="antecedentFacts">Choose antecedent fact:</label>
+<select id="antecedentFacts" value=@_selectedAntecedentFact @onchange="SelectedAntecedentFactChanged">
+    <option value=""></option>
+@if (_newAntecedent!= null)
+        {
+@foreach (var fact in _newAntecedent)
+        {
+            <option value="@fact">@fact</option>
+        }
+        }
+        </select>
+                                <input type="text" id="antecedentFactField" class="form-control" style="margin-bottom: 1rem;" @bind = "@_newAntecedentFact"/>
+                                                <button class="btn btn-primary" type="button" onclick ="@ChangeAntecedentFact">@_antecedentFactButtonText</button>
+@if (_isAntecedentFactUpdate)
+    {
+    <button class="btn btn-primary" type="button" onclick ="@RemoveAntecedentFact">Remove antecedent fact</button>
+    }
+<label for="consequent">Consequent:</label>
+                                <input type="text" id="consequent" class="form-control" style="margin-bottom: 1rem;" @bind = "@_consequent"/>
+@if (_isRuleUpdate && _knowledgeBase.Rules.Count>1)
+                {
+                    <label for="changeNumber">Exchange with another rule (type number):</label>
+                    <input type="number" id="changeNumber" class="form-control" style="margin-bottom: 1rem;" @bind = "@_changeNumber"/>
+                    <button class="btn btn-primary" type="button" onclick ="@ChangeRuleNumber">Change number</button>
+                }
+@if (!_isRuleUpdate)
+                {
+                    <label for="position">Rule position (leave empty to add to the end):</label>
+                    <input type="number" id="position" class="form-control" style="margin-bottom: 1rem;" @bind = "@_position"/>
+                }
+                <button class="btn btn-primary" type="button" onclick ="@ChangeRule">@_ruleButtonText</button>
+@if (_isRuleUpdate)
+    {
+    <button class="btn btn-primary" type="button" onclick ="@RemoveRule">Remove rule</button>
+    }
+</div>
+                    <div class="card-footer">
+    <button class="btn btn-primary" type="button" onclick ="@SaveChanges">SaveChanges</button>
+    <NavLink class="btn btn-primary" href="@_backLink">
+    Go back
+</NavLink>
+</div>
+</div>
+                        }
+                        else                         if (!string.IsNullOrWhiteSpace(_idError))
+                        {
+                                                        <div class="alert alert-danger">
+                                @_idError
+    </div>
+}
+else
+{
+    <p>Loading...</p>
+}
+</div>
+
+@code {
+    [Parameter]
+    public string KnowledgeBaseId{ get; set; }
+    Models.KnowledgeBase _knowledgeBase;
+    const string _apiURI = "https://localhost:7071/api/KnowledgeBase";
+    string? _error = null, _idError = null;
+    string? _selectedFact = null, _newFact = null, _selectedAntecedentFact = null, _newAntecedentFact = null, _consequent = null;
+    string _factButtonText = "Add fact", _ruleButtonText = "Add rule", _antecedentFactButtonText = "Add antecedent fact";
+    Rule? _selectedRule = new Rule();
+    bool _isFactUpdate = false, _isRuleUpdate = false, _isAntecedentFactUpdate = false;
+    List<string> _newAntecedent = new List<string>();
+    string? _backLink, _ruleNumber = null, _changeNumber = null, _position = null;
+    protected override async Task OnInitializedAsync()
+    {
+        _backLink = $"/KnowledgeBase/{KnowledgeBaseId}";
+        try
+        {
+            _knowledgeBase = await Http.GetFromJsonAsync<Models.KnowledgeBase>($"{_apiURI}/{KnowledgeBaseId}");
+            if (_knowledgeBase.Facts is null)
+            {
+                _knowledgeBase.Facts = new List<string>();
+            }
+            if (_knowledgeBase.Rules is null)
+            {
+                _knowledgeBase.Rules = new List<Rule>();
+            }
+            _knowledgeBase.Rules.Sort((a, b) => a.Number.CompareTo(b.Number));
+            for (int i=0; i<_knowledgeBase.Rules.Count; ++i)
+            {
+                _knowledgeBase.Rules[i].Number = i + 1;
+            }
+            _selectedRule.Number = _knowledgeBase.Rules.Count + 1;
+        }
+        catch (Exception)
+        {
+            _idError = "Knowledge base does not exist.";
+        }
+
+    }
+
+    void SelectedFactChanged(ChangeEventArgs e)
+    {
+        _selectedFact = e.Value.ToString();
+        _newFact = e.Value.ToString();
+        if (string.IsNullOrEmpty(_selectedFact))
+        {
+            _factButtonText = "Add fact";
+            _isFactUpdate = false;
+        }
+        else
+        {
+            _factButtonText = "Update fact";
+            _isFactUpdate = true;
+        }
+    }
+
+    void SelectedRuleChanged(ChangeEventArgs e)
+    {
+        _ruleNumber = e.Value.ToString();
+        int number;
+        int.TryParse(_ruleNumber, out number);
+        _selectedRule = _knowledgeBase.Rules.FirstOrDefault(r => r.Number == number);
+        if (_selectedRule == null)
+        {
+            _ruleButtonText = "Add rule";
+            _isRuleUpdate = false;
+            _selectedRule = new Rule();
+            _selectedRule.Number = _knowledgeBase.Rules.Count + 1;
+            _newAntecedent = new List<string>();
+        }
+        else
+        {
+            _ruleButtonText = "Update rule";
+            _isRuleUpdate = true;
+            _newAntecedent = _selectedRule.Antecedent.Select(antecedent => antecedent ).ToList();
+        }
+        _newFact = null;
+        _newAntecedentFact = null;
+        _selectedAntecedentFact = null;
+        _consequent = new string(_selectedRule.Consequent);
+        _antecedentFactButtonText = "Add antecedent fact";
+        _isAntecedentFactUpdate = false;
+        _position = null;
+    }
+
+    void SelectedAntecedentFactChanged(ChangeEventArgs e)
+    {
+        _selectedAntecedentFact = e.Value.ToString();
+        _newAntecedentFact = e.Value.ToString();
+        if (string.IsNullOrEmpty(_selectedAntecedentFact))
+        {
+            _antecedentFactButtonText = "Add antecedent fact";
+            _isAntecedentFactUpdate = false;
+        }
+        else
+        {
+            _antecedentFactButtonText = "Update antecedent fact";
+            _isAntecedentFactUpdate = true;
+        }
+    }
+
+    void ChangeFact()
+    {
+        _error = null;
+        if (string.IsNullOrEmpty(_newFact))
+        {
+            _error = "Fact cannot be empty.";
+            return;
+        }
+        if (!_isFactUpdate)
+        {
+            if (_knowledgeBase.Facts.Contains(_newFact))
+            {
+                _error = $"Fact {_newFact} already exists.";
+                return;
+            }
+            _knowledgeBase.Facts.Add(_newFact);
+            _newFact = null;
+        }
+        else
+        {
+            var factIndex = _knowledgeBase.Facts.IndexOf(_selectedFact);
+            _knowledgeBase.Facts.Remove(_selectedFact);
+            _knowledgeBase.Facts.Insert(factIndex, _newFact);
+        }
+    }
+
+    void ChangeRule()
+    {
+        _error = null;
+        if (string.IsNullOrEmpty(_consequent))
+        {
+            _error = "Rule consequent cannot be empty.";
+            return;
+        }
+        if (_newAntecedent.Count == 0)
+        {
+            _error = "Rule antecedent should contain at least 1 fact.";
+            return;
+        }
+
+        var rulesUnique = false;
+        foreach (var rule in _knowledgeBase.Rules)
+        {
+            if (rule.Number == _selectedRule.Number && _isRuleUpdate)
+            {
+                continue;
+            }
+            if (rule.Consequent != _consequent)
+            {
+                continue;
+            }
+            else if (rule.Antecedent.Count != _newAntecedent.Count)
+            {
+                continue;
+            }
+            var factsUnique = true;
+            foreach (var antecedent in _newAntecedent)
+            {
+                if (!rule.Antecedent.Contains(antecedent))
+                {
+                    factsUnique = true;
+                }
+            }
+            if (!factsUnique)
+            {
+                rulesUnique = true;
+            }
+        }
+        if (rulesUnique)
+        {
+            _error = "This rule already exists.";
+            return;
+        }
+        _selectedRule.Consequent = _consequent;
+        _selectedRule.Antecedent = _newAntecedent;
+
+        if (!_isRuleUpdate)
+        {
+            if (_position is null)
+            {
+                _knowledgeBase.Rules.Add(_selectedRule);
+            }
+            else
+            {
+                int position;
+                int.TryParse(_position, out position);
+                if (position <1 || position >_knowledgeBase.Rules.Count+1)
+                {
+                    _error = $"You can provide rule number from 0 to {_knowledgeBase.Rules.Count+1}.";
+                    return;
+                }
+                _selectedRule.Number = position;
+                _knowledgeBase.Rules.Insert(position - 1, _selectedRule);
+                for (int i=position;i<_knowledgeBase.Rules.Count;++i)
+                {
+                    ++_knowledgeBase.Rules[i].Number;
+                }
+                _position = null;
+            }
+                _ruleNumber = (_knowledgeBase.Rules.Count+1).ToString();
+                    _selectedRule = new Rule();
+                    _selectedRule.Number = _knowledgeBase.Rules.Count+1;
+                    _consequent = null;
+                    _newFact = null;
+                    _newAntecedentFact = null;
+                    _newAntecedent = new List<string>();
+                    if (_isAntecedentFactUpdate)
+                    {
+                        _isAntecedentFactUpdate = false;
+                        _antecedentFactButtonText = "Add antecedent fact";
+                    }
+                }
+                else
+                {
+                    _knowledgeBase.Rules.RemoveAt(_selectedRule.Number - 1);
+                    _knowledgeBase.Rules.Insert(_selectedRule.Number - 1, _selectedRule);
+                }
+            }
+
+            void ChangeAntecedentFact()
+            {
+                _error = null;
+                if (string.IsNullOrEmpty(_newAntecedentFact))
+                {
+                    _error = "Antecedent fact cannot be empty.";
+                    return;
+                }
+                if (!_isAntecedentFactUpdate)
+                {
+                    if (_newAntecedent.Contains(_newAntecedentFact))
+                    {
+                        _error = $"Fact {_newAntecedentFact} already exists in antecedent.";
+                        return;
+                    }
+                    _newAntecedent.Add(_newAntecedentFact);
+                    _newAntecedentFact = null;
+                }
+                else
+                {
+                    var factIndex = _newAntecedent.IndexOf(_selectedAntecedentFact);
+                    _newAntecedent.Remove(_selectedAntecedentFact);
+                    _newAntecedent.Insert(factIndex, _newAntecedentFact);
+                }
+            }
+
+            void RemoveFact()
+            {
+                _error = null;
+                _knowledgeBase.Facts.Remove(_selectedFact);
+                _newFact = null;
+            }
+
+            void RemoveRule()
+            {
+                _error = null;
+                _knowledgeBase.Rules.Remove(_selectedRule);
+                _newFact = null;
+                _newAntecedentFact = null;
+                _consequent = null;
+                _ruleNumber = (_knowledgeBase.Rules.Count+1).ToString();
+                _selectedRule = new Rule();
+                _selectedRule.Number = _knowledgeBase.Rules.Count+1;
+                _isRuleUpdate = false;
+                _ruleButtonText = "Add rule";
+                _position = null;
+                if (!_isAntecedentFactUpdate)
+        {
+            _isAntecedentFactUpdate = false;
+            _antecedentFactButtonText = "Update antecedent fact";
+        }
+    }
+
+    void RemoveAntecedentFact()
+    {
+        _error = null;
+        _newAntecedent.Remove(_selectedAntecedentFact);
+        _newAntecedentFact = null;
+        _isAntecedentFactUpdate = false;
+        _antecedentFactButtonText = "Add antecedent fact";
+    }
+
+    async Task SaveChanges()
+    {
+        _error = null;
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"{_apiURI}/{_knowledgeBase.Id}", _knowledgeBase);
+            response.EnsureSuccessStatusCode();
+        }        
+        catch (Exception)
+        {
+            _error = "Error saving changes.";
+        }
+    }
+
+    void ChangeRuleNumber()
+    {
+        _error = null;
+        int number;
+        int.TryParse(_changeNumber, out number);
+        if (number <1 || number >_knowledgeBase.Rules.Count+1)
+        {
+            _error = "You can provide only existing rule number.";
+            return;
+        }
+        Rule changingRule = _knowledgeBase.Rules.FirstOrDefault(r => r.Number == number);
+        if (changingRule == null)
+        {
+            _error = "Rule not found.";
+            return;
+        }
+        changingRule.Number = _selectedRule.Number;
+        _selectedRule.Number = number;
+        _ruleNumber = _selectedRule.Number.ToString();
+            _knowledgeBase.Rules.Sort((a, b) => a.Number.CompareTo(b.Number));
+    }
+    }
+   

@@ -1,0 +1,100 @@
+﻿@page "/KnowledgeBaseInit"
+@using System.Net.Http
+@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Json
+@using ChainingFrontend.Models
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Knowledge bases</PageTitle>
+        <div class="col-md-8 mx-auto">
+            <EditForm Model="@_knowledgeBaseForm" OnValidSubmit="@HandleSubmit">
+
+                <div class="card" style="margin: auto; max-width: 500px; min-height: 16rem;">
+                    <div class="card-header d-flex">
+                        <h1>@_headerText</h1>
+                        <button class="btn btn-primary" type="button" onclick ="@HandleCreateFindButton">@_createFindButtonText</button>
+                    </div>
+
+                    <div class="card-body">
+                        @if (!string.IsNullOrWhiteSpace(_error))
+                        {
+                            <div class="alert alert-danger">
+                                @_error
+                            </div>
+                        }
+                        <DataAnnotationsValidator/>
+                        <label class="form-label" for="nameField">Enter knowledge base name:</label>
+                        <InputText id="nameField" class="form-control" style="margin-bottom: 1rem;" @bind-Value="@_knowledgeBaseForm.Name"/>
+                        <ValidationMessage For="@(() => _knowledgeBaseForm.Name)"/>
+
+                    </div>
+                    <div class="card-footer">
+                        <button  class="btn btn-primary align-bottom" type="submit">@_submitButtonText</button>
+                    </div>
+                </div>
+            </EditForm>
+
+        </div>
+
+@code {
+    const string _apiURI = "https://localhost:7071/api/KnowledgeBase";
+    string? _error;
+    string? _headerText = "Load knowledge base data";
+    string? _createFindButtonText = "Create new knowledge base";
+    string? _submitButtonText = "Find";
+    bool _findMode = true;
+    readonly FormData _knowledgeBaseForm = new();
+    private async Task HandleSubmit()
+    {
+        Models.KnowledgeBase knowledgeBase;
+        try
+        {
+            if (_findMode)
+            {
+                knowledgeBase = await Http.GetFromJsonAsync<Models.KnowledgeBase>($"{_apiURI}/name/{_knowledgeBaseForm.Name}");
+            }
+            else
+            {
+                var newKnowledgeBase = new Models.KnowledgeBase
+                {
+                    Name = _knowledgeBaseForm.Name
+                };
+                var response = await Http.PostAsJsonAsync(_apiURI, newKnowledgeBase);
+                knowledgeBase = await response.Content.ReadFromJsonAsync<Models.KnowledgeBase>();
+            }
+            _error = null;
+            NavigationManager.NavigateTo($"/KnowledgeBase/{knowledgeBase.Id}");
+        }
+        catch (Exception)
+        {
+            _error = _findMode ? "Knowledge base not found. Try another name." : "Error creating knowledge base.";
+        }
+    }
+
+    void HandleCreateFindButton()
+    {
+        _error = null;
+        if (_findMode)
+        {
+            _headerText = "Create new knowledge base";
+    _createFindButtonText = "Find existing knowledge base";
+    _submitButtonText = "Create";
+    _findMode = false;
+        }
+        else
+        {
+_headerText = "Load knowledge base data";
+    _createFindButtonText = "Create new knowledge base";
+    _submitButtonText = "Find";
+    _findMode = true;
+                    }
+    }
+
+    class FormData
+    {
+        [Required(ErrorMessage = "Enter the name")]
+        public string? Name { get; set; }
+    }
+
+}
